@@ -1,31 +1,79 @@
 ---
 title: "ons_energy_report"
-format: html
+format:
+  html:
+    code-fold: true
+    code-summary: "Code"
 editor: visual
 ---
 
 ## Quarto
 
-Quarto enables you to weave together content and executable code into a finished document. To learn more about Quarto see <https://quarto.org>.
+Priority
+* Do some analysis of inflation by region
+     If a region shows high levels of food inflation, then energy intensity of food in that region might be more than the UK level in the ONS article
+* do an interactive regional plot
+* Try and predict next month's
 
-## Running Code
-
-When you click the **Render** button a document will be generated that includes both content and the output of embedded code. You can embed code like this:
-
-```{r}
-1 + 1
-```
-
-You can add options to executable code like this
+https://quarto.org/docs/output-formats/html-code.html
 
 ```{r}
-#| echo: false
-2 * 2
-```
+# loading packages
+pacman::p_load(janitor,
+               dplyr)
 
-The `echo: false` option disables the printing of code (only output is displayed).
+# reading data
+prices_2023_07 <- read.csv("./data/upload-pricequotes202307.csv")
+
+# cleaning column names
+prices_2023_07 <- prices_2023_07 |>
+  clean_names()
+
+# removing quotes that are not valid
+prices_2023_07 <- prices_2023_07 |>
+  filter(validity %in% c(3, 4) & region != 1)
+
+# replacing reference value terms with text
+prices_2023_07 <- prices_2023_07 |>
+  mutate(
+    shop_type = case_when(
+      shop_type == 1 ~ "Multiple",
+      TRUE ~ "Independent"),
+    region = case_when(
+      region == 2 ~ "London",
+      region == 3 ~ "South East England",
+      region == 4 ~ "South West England",
+      region == 5 ~ "East Anglia",
+      region == 6 ~ "East Midlands",
+      region == 7  ~ "West Midlands",
+      region == 8 ~ "Yorks & Humber",
+      region == 9 ~ "North West England",
+      region == 10 ~ "North East England",
+      region == 11 ~ "Wales",
+      region == 12 ~ "Scotland",
+      region == 13 ~ "Northern Ireland")
+    )
+
+
+
+```
 
 ```{r}
-# Testing a new code chunk
+# Geospatial part
+
+
 ```
+
+
+
+
+
+
+
+
+
+
+
+
+
 
