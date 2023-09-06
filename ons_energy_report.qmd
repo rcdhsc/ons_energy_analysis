@@ -9,11 +9,7 @@ editor: visual
 
 ## Quarto
 
-Priority
-* Do some analysis of inflation by region
-     If a region shows high levels of food inflation, then energy intensity of food in that region might be more than the UK level in the ONS article
-* do an interactive regional plot
-* Try and predict next month's
+Priority \* Do some analysis of inflation by region If a region shows high levels of food inflation, then energy intensity of food in that region might be more than the UK level in the ONS article \* do an interactive regional plot \* Try and predict next month's
 
 https://quarto.org/docs/output-formats/html-code.html
 
@@ -67,15 +63,15 @@ prices_2023_07 |>
 
 ```
 
-
-* Interactive map
-* Try and calculate fuel_poverty based only on neighbours fuel poverty
+-   Interactive map
+-   Distribution of fuel poverty (e.g. no one below 5%)
+-   Try and calculate fuel_poverty based only on neighbours fuel poverty
 
 ```{r}
 # loading packages
 if (!require("pacman")) install.packages("pacman")
 
-pacman::p_load(readxl, janitor, dplyr, stringr, sf, tmap)
+pacman::p_load(readxl, janitor, dplyr, stringr, sf, tmap, leaflet)
 
 
 # reading fuel poverty data
@@ -112,8 +108,6 @@ fuel_poverty <- fuel_poverty |>
 
 
 # reading in geospatial data
-lad_bounds <- read.csv("./data/Local_Authority_Districts_May_2023_UK_BUC_V2_-7051305877737324269.csv")
-
 lad_shp <- sf::st_read("./data/LAD_MAY_2023_UK_BUC_V2.shp", quiet = TRUE)
 
 fuel_poverty <- left_join(fuel_poverty,
@@ -128,32 +122,26 @@ fuel_poverty_sf <- sf::st_as_sf(fuel_poverty)
 
 tmap::tmap_mode("plot")
 
-tmap::qtm(fuel_poverty_sf)
-
-fuel_poverty |>
-  filter(is.na(geometry))
-
-
-
-
+tm_shape(fuel_poverty_sf) +
+  tm_polygons(col = "households_fp_pct",
+              title = "Proportion of households\nin fuel poverty") +
+  tm_layout(title = "Fuel poverty is widespread throughout England and Wales",
+            frame = FALSE,
+            inner.margins = c(0.1, 0.1, 0.1, 0.1))
 
 
+fuel_poverty_sf |>
+  count(area_name) |>
+  arrange(desc(n))
 
+fuel_poverty_sf2 <- fuel_poverty_sf |>
+  select(-c(BNG_E, BNG_N, LAT, LONG))
+
+leaflet(st_transform(fuel_poverty_sf2, 4326)) %>%
+  addPolygons()
 
 
 
 
 
 ```
-
-
-
-
-
-
-
-
-
-
-
-
