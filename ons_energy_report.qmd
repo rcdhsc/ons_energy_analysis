@@ -31,7 +31,9 @@ prices_2023_07 <- prices_2023_07 |>
 
 # removing quotes that are not valid
 prices_2023_07 <- prices_2023_07 |>
-  filter(validity %in% c(3, 4) & region != 1)
+  filter(validity %in% c(3, 4),
+         base_validity %in% c(3, 4),
+         region != 1)
 
 # replacing reference value terms with text
 prices_2023_07 <- prices_2023_07 |>
@@ -54,7 +56,8 @@ prices_2023_07 <- prices_2023_07 |>
       region == 13 ~ "Northern Ireland")
     )
 
-
+prices_2023_07 |>
+  count(base_validity)
 
 ```
 
@@ -65,6 +68,83 @@ prices_2023_07 <- prices_2023_07 |>
 ```
 
 
+* Interactive map
+* Try and calculate fuel_poverty based only on neighbours fuel poverty
+
+```{r}
+# loading packages
+if (!require("pacman")) install.packages("pacman")
+
+pacman::p_load(readxl, janitor, dplyr, stringr, sf, tmap)
+
+
+# reading fuel poverty data
+fuel_poverty <- read_xlsx("./data/sub-regional-fuel-poverty-tables-2023-2021-data.xlsx",
+                          sheet = "Table 2",
+                          skip = 2)
+
+
+# cleaning data
+fuel_poverty <- fuel_poverty |>
+  clean_names()
+
+fuel_poverty <- fuel_poverty |>
+  rename(area_codes = area_codes_note_4,
+         region = area_names,
+         subregion = x3,
+         area_name = x4,
+         households_total = number_of_households,
+         households_fp = number_of_households_in_fuel_poverty,
+         households_fp_pct = proportion_of_households_fuel_poor_percent)
+
+fuel_poverty <- fuel_poverty |>
+  filter(!(is.na(households_fp)))
+
+# removing areas that are a collection of smaller areas
+# only want the smallest level available in the data
+fuel_poverty <- fuel_poverty |>
+  filter(!(str_detect(area_codes, "^E1") | str_detect(area_codes, "^E9")))
+
+# tidying up area name column
+fuel_poverty <- fuel_poverty |>
+  mutate(area_name = if_else(is.na(area_name), subregion, area_name)) |>
+  select(-c(region, subregion))
+
+
+# reading in geospatial data
+lad_bounds <- read.csv("./data/Local_Authority_Districts_May_2023_UK_BUC_V2_-7051305877737324269.csv")
+
+lad_shp <- sf::st_read("./data/LAD_MAY_2023_UK_BUC_V2.shp", quiet = TRUE)
+
+fuel_poverty <- left_join(fuel_poverty,
+                          lad_shp,
+                          join_by(area_codes == LAD23CD))
+
+```
+
+```{r}
+
+fuel_poverty_sf <- sf::st_as_sf(fuel_poverty)
+
+tmap::tmap_mode("plot")
+
+tmap::qtm(fuel_poverty_sf)
+
+fuel_poverty |>
+  filter(is.na(geometry))
+
+
+
+
+
+
+
+
+
+
+
+
+```
 
 
 
