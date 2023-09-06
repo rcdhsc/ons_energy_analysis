@@ -3,65 +3,11 @@ title: "ons_energy_report"
 format:
   html:
     code-fold: true
-    code-summary: "Code"
+    code-summary: ""
 editor: visual
 ---
 
 ## Quarto
-
-Priority \* Do some analysis of inflation by region If a region shows high levels of food inflation, then energy intensity of food in that region might be more than the UK level in the ONS article \* do an interactive regional plot \* Try and predict next month's
-
-https://quarto.org/docs/output-formats/html-code.html
-
-```{r}
-# loading packages
-pacman::p_load(janitor,
-               dplyr)
-
-# reading data
-prices_2023_07 <- read.csv("./data/upload-pricequotes202307.csv")
-
-# cleaning column names
-prices_2023_07 <- prices_2023_07 |>
-  clean_names()
-
-# removing quotes that are not valid
-prices_2023_07 <- prices_2023_07 |>
-  filter(validity %in% c(3, 4),
-         base_validity %in% c(3, 4),
-         region != 1)
-
-# replacing reference value terms with text
-prices_2023_07 <- prices_2023_07 |>
-  mutate(
-    shop_type = case_when(
-      shop_type == 1 ~ "Multiple",
-      TRUE ~ "Independent"),
-    region = case_when(
-      region == 2 ~ "London",
-      region == 3 ~ "South East England",
-      region == 4 ~ "South West England",
-      region == 5 ~ "East Anglia",
-      region == 6 ~ "East Midlands",
-      region == 7  ~ "West Midlands",
-      region == 8 ~ "Yorks & Humber",
-      region == 9 ~ "North West England",
-      region == 10 ~ "North East England",
-      region == 11 ~ "Wales",
-      region == 12 ~ "Scotland",
-      region == 13 ~ "Northern Ireland")
-    )
-
-prices_2023_07 |>
-  count(base_validity)
-
-```
-
-```{r}
-# Geospatial part
-
-
-```
 
 -   Interactive map
 -   Distribution of fuel poverty (e.g. no one below 5%)
@@ -129,18 +75,28 @@ tm_shape(fuel_poverty_sf) +
             frame = FALSE,
             inner.margins = c(0.1, 0.1, 0.1, 0.1))
 
-
-fuel_poverty_sf |>
-  count(area_name) |>
-  arrange(desc(n))
-
 fuel_poverty_sf2 <- fuel_poverty_sf |>
   select(-c(BNG_E, BNG_N, LAT, LONG))
 
-leaflet(st_transform(fuel_poverty_sf2, 4326)) %>%
-  addPolygons()
+fuel_poverty_sf2 <- st_transform(fuel_poverty_sf2, 4326)
 
+bins <- c(0, 5, 10, 15, 20, 25)
+pal <- colorBin("YlOrRd", domain = fuel_poverty_sf2$households_fp_pct, bins = bins)
 
+labels <- sprintf(
+  "<strong>%s</strong><br/>
+  %.1f%% (%d people)",
+  fuel_poverty_sf2$area_name, fuel_poverty_sf2$households_fp_pct, fuel_poverty_sf2$households_fp
+) %>% lapply(htmltools::HTML)
+
+leaflet(st_transform(fuel_poverty_sf2, 4326)) |>
+  addTiles() |>
+  addPolygons(label = labels,
+              weight = 1,
+              color = "white",
+              fillOpacity = 0.6,
+              fillColor = ~pal(fuel_poverty_sf2$households_fp_pct)) |>
+  addLegend(pal = pal, values = ~households_fp_pct)
 
 
 
