@@ -1,24 +1,28 @@
 ---
-title: "ons_energy_report"
+title: "Where are the islands of fuel poverty?"
 format:
   html:
     code-fold: true
-    code-summary: ""
+    code-summary: "Code"
 editor: visual
 ---
 
-## Quarto
+### Key points
 
--   Interactive map
--   Distribution of fuel poverty (e.g. no one below 5%)
--   Try and calculate fuel_poverty based only on neighbours fuel poverty
+-   Fuel poverty is widespread in England - there are at least 5% of households living in fuel poverty in every local authority
+-   But there are islands of difference, where fuel poverty is different in one area to all of its surrounding areas
+-   There are 23 'islands of difference' - 20 LAs are 'above' islands (fuel poverty is higher than all neighbours) and 3 'under' islands (fuel poverty is lower than all neighbours)
+-   Energy policy should be targeted at 'above' islands to improve their poor energy performance to the same level as their neighbours
 
-```{r}
+### Analysis
+
+```{r output = FALSE}
+### initial reading and cleaning of data
+
 # loading packages
 if (!require("pacman")) install.packages("pacman")
 
-pacman::p_load(readxl, janitor, dplyr, stringr, sf, tmap, leaflet)
-
+pacman::p_load(readxl, janitor, dplyr, stringr, sf, tmap, leaflet, htmltools, gifski)
 
 # reading fuel poverty data
 fuel_poverty <- read_xlsx("./data/sub-regional-fuel-poverty-tables-2023-2021-data.xlsx",
@@ -56,48 +60,141 @@ fuel_poverty <- fuel_poverty |>
 # reading in geospatial data
 lad_shp <- sf::st_read("./data/LAD_MAY_2023_UK_BUC_V2.shp", quiet = TRUE)
 
+
+# joining together
 fuel_poverty <- left_join(fuel_poverty,
                           lad_shp,
                           join_by(area_codes == LAD23CD))
 
+
+# tidying output
+fuel_poverty <- fuel_poverty |>
+  select(c(area_codes, area_name, households_total,
+           households_fp, households_fp_pct, geometry))
+
+
+# converting to geospatial object
+fuel_poverty_sf <- sf::st_as_sf(fuel_poverty)
+
+```
+
+```{r output = FALSE}
+### calculating and plotting islands of difference
+
+# identifying the neighbours of each local authority district
+fuel_poverty_sf_neighbours <- st_set_geometry(st_intersection(fuel_poverty_sf, fuel_poverty_sf), NULL)
+
+
+# tidying up
+fuel_poverty_sf_neighbours <- fuel_poverty_sf_neighbours |>
+  rename(neigh_code = area_codes.1,
+         neigh_name = area_name.1,
+         neigh_households_total = households_total.1,
+         neigh_households_fp = households_fp.1,
+         neigh_households_fp_pct = households_fp_pct.1)
+
+
+# removing records where the area is matched to itself
+fuel_poverty_sf_neighbours <- fuel_poverty_sf_neighbours |>
+  filter(area_name != neigh_name)
+
+
+# grouping fuel poverty into categories and calculating when they're different
+fuel_poverty_sf_neighbours <- fuel_poverty_sf_neighbours |>
+  mutate(
+    area_group = case_when(
+      households_fp_pct < 5 ~ "0 to 5",
+      households_fp_pct < 10 ~ "5 to 10",
+      households_fp_pct < 15 ~ "10 to 15",
+      households_fp_pct < 20 ~ "15 to 20",
+      households_fp_pct < 25 ~ "20 to 25",
+      TRUE ~ "Over 25"),
+    neigh_group = case_when(
+      neigh_households_fp_pct < 5 ~ "0 to 5",
+      neigh_households_fp_pct < 10 ~ "5 to 10",
+      neigh_households_fp_pct < 15 ~ "10 to 15",
+      neigh_households_fp_pct < 20 ~ "15 to 20",
+      neigh_households_fp_pct < 25 ~ "20 to 25",
+      TRUE ~ "Over 25"),
+    group_diff = case_when(
+      area_group == neigh_group ~ "Same",
+      households_fp_pct > neigh_households_fp_pct ~ "'Above' islands",
+      households_fp_pct < neigh_households_fp_pct ~ "'Under' islands")
+  )
+
+
+# identifying which areas are completely surrounded by different neighbours
+neighbours_summary <- fuel_poverty_sf_neighbours |>
+  group_by(area_codes, group_diff) |>
+  summarise(n = n()) |>
+  mutate(freq = n / sum(n)) |>
+  filter(group_diff != "Same" & freq == 1) |>
+  select(-c(n, freq))
+
+neighbours_summary <- left_join(neighbours_summary,
+                                fuel_poverty_sf,
+                                join_by(area_codes == area_codes))
+
+
+# joining islands to full dataset for plotting
+neighbours_summary <- sf::st_as_sf(neighbours_summary)
+
+st_set_crs(neighbours_summary, 27700)
+
+fuel_poverty_sf$group_diff <- "All"
+
+fuel_poverty_sf <- rbind(fuel_poverty_sf, neighbours_summary)
+
+fuel_poverty_sf <- fuel_poverty_sf |>
+  mutate(map_labels = case_when(
+    group_diff == "All" ~ "",
+    TRUE ~ area_name
+  ))
+
+tmap::tmap_mode("view")
+
+fuel_anim <- fuel_poverty_sf |>
+  tm_shape() +
+  tm_polygons(col = "households_fp_pct",
+              title = "Proportion of households\nin fuel poverty") +
+  tm_facets(along = "group_diff", free.coords = FALSE) +
+  tm_text("map_labels", size = 1)
+
+tmap_animation(fuel_anim, filename = "fuel_anim.gif", delay = 400)
+
 ```
 
 ```{r}
+knitr::include_graphics("fuel_anim.gif")
+```
 
-fuel_poverty_sf <- sf::st_as_sf(fuel_poverty)
+Things I would have done with more time:
 
-tmap::tmap_mode("plot")
+-   Include greyed outline of UK and other local authorities in the animated map
+-   Improved text labels in the map
+-   I spent most of the time creating the below interactive leaflet map but it can't render in the HTML webpage because of a conflict between knitr and leaflet. It can be fixed by installing an older version of knitr but I didn't want to mess around with package versions. Screenshot below to show what it looks like in RStudio
 
-tm_shape(fuel_poverty_sf) +
-  tm_polygons(col = "households_fp_pct",
-              title = "Proportion of households\nin fuel poverty") +
-  tm_layout(title = "Fuel poverty is widespread throughout England and Wales",
-            frame = FALSE,
-            inner.margins = c(0.1, 0.1, 0.1, 0.1))
+![](leaflet_map_example.png)
 
-fuel_poverty_sf2 <- fuel_poverty_sf |>
-  select(-c(BNG_E, BNG_N, LAT, LONG))
-
-fuel_poverty_sf2 <- st_transform(fuel_poverty_sf2, 4326)
+```{r eval = FALSE}
 
 bins <- c(0, 5, 10, 15, 20, 25)
-pal <- colorBin("YlOrRd", domain = fuel_poverty_sf2$households_fp_pct, bins = bins)
+pal <- colorBin("YlOrRd", domain = fuel_poverty_sf$households_fp_pct, bins = bins)
 
-labels <- sprintf(
-  "<strong>%s</strong><br/>
-  %.1f%% (%d people)",
-  fuel_poverty_sf2$area_name, fuel_poverty_sf2$households_fp_pct, fuel_poverty_sf2$households_fp
-) %>% lapply(htmltools::HTML)
+labels <- sprintf("<strong>%s</strong><br/>%.1f%% (%d people)",
+                  fuel_poverty_sf$area_name,
+                  fuel_poverty_sf$households_fp_pct,
+                  fuel_poverty_sf$households_fp) |>
+  lapply(htmltools::HTML)
 
-leaflet(st_transform(fuel_poverty_sf2, 4326)) |>
+leaflet(st_transform(fuel_poverty_sf, 4326)) |>
   addTiles() |>
   addPolygons(label = labels,
               weight = 1,
               color = "white",
               fillOpacity = 0.6,
-              fillColor = ~pal(fuel_poverty_sf2$households_fp_pct)) |>
+              fillColor = ~pal(fuel_poverty_sf$households_fp_pct)) |>
   addLegend(pal = pal, values = ~households_fp_pct)
-
 
 
 ```
